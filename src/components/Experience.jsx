@@ -73,6 +73,15 @@ export const Experience = () => {
           side={DoubleSide}
         />
       </mesh>
+      {/* GROUND */}
+      <mesh
+        position-y={-responsiveBoudaries.y / 2}
+        rotation-x={-Math.PI / 2}
+        receiveShadow
+      >
+        <planeGeometry args={[100, 100]} />
+        <meshStandardMaterial color={THEMES[theme].groundColor} />
+      </mesh>
 
       {/* LIGHTS */}
       <SoftShadows size={15} focus={1.5} samples={12} />
