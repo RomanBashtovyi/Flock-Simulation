@@ -12,8 +12,17 @@ import {
 import { Vector3 } from 'three'
 import { useFrame } from '@react-three/fiber'
 
+function remap(value, low1, high1, low2, high2) {
+  return (
+    low2 +
+    ((high2 - low2) * (value - low1)) / (high1 - low1)
+  )
+}
+
 const limits = new Vector3()
 const wander = new Vector3()
+const alignment = new Vector3()
+
 const steering = new Vector3()
 
 export const Boids = ({ boudaries }) => {
@@ -56,10 +65,11 @@ export const Boids = ({ boudaries }) => {
     }
   )
 
-  const { threeD } = useControls(
+  const { threeD, ALIGNMENT } = useControls(
     'Boid Rules',
     {
       threeD: { value: false },
+      ALIGNMENT: { value: true },
     },
     {
       collapsed: true,
@@ -83,6 +93,29 @@ export const Boids = ({ boudaries }) => {
           step: 1,
         },
         WANDER_CIRCLE: false,
+      },
+      {
+        collapsed: true,
+      }
+    )
+
+  const { ALIGN_RADIUS, ALIGN_STRENGTH, ALIGN_CIRCLE } =
+    useControls(
+      'Alignment',
+      {
+        ALIGN_CIRCLE: false,
+        ALIGN_RADIUS: {
+          value: 1.2,
+          min: 0,
+          max: 10,
+          step: 0,
+        },
+        ALIGN_STRENGTH: {
+          value: 4,
+          min: 0,
+          max: 10,
+          step: 1,
+        },
       },
       {
         collapsed: true,
@@ -134,6 +167,7 @@ export const Boids = ({ boudaries }) => {
       //reset forces
       limits.multiplyScalar(0)
       steering.multiplyScalar(0)
+      alignment.multiplyScalar(0)
 
       //limits
       if (Math.abs(boid.position.x) + 1 > boudaries.x / 2) {
@@ -151,13 +185,48 @@ export const Boids = ({ boudaries }) => {
       limits.normalize()
       limits.multiplyScalar(50)
 
+      // loop through all boids
+      for (let b = 0; b < boids.length; b++) {
+        if (b === i) {
+          // skip to get only other boids
+          continue
+        }
+        const other = boids[b]
+        let distance = boid.position.distanceTo(
+          other.position
+        )
+
+        //alignment
+        if (distance > 0 && distance < ALIGN_RADIUS) {
+          const copy = other.velocity.clone()
+          copy.normalize()
+          copy.divideScalar(distance)
+          alignment.add(copy)
+        }
+      }
+
       //apply forces
       steering.add(limits)
       steering.add(wander)
 
+      if (ALIGNMENT) {
+        alignment.normalize()
+        alignment.multiplyScalar(ALIGN_STRENGTH)
+        steering.add(alignment)
+      }
+
       steering.clampLength(0, MAX_STEERING * delta)
       boid.velocity.add(steering)
-      boid.velocity.clampLength(0, MAX_SPEED * delta)
+      boid.velocity.clampLength(
+        0,
+        remap(
+          boid.scale,
+          MIN_SCALE,
+          MAX_SCALE,
+          MAX_SPEED,
+          MIN_SPEED
+        ) * delta
+      )
 
       //apply velocity
       boid.position.add(boid.velocity)
@@ -174,6 +243,8 @@ export const Boids = ({ boudaries }) => {
       animation={'Fish_Armature|Swimming_Fast'}
       wanderCircle={WANDER_CIRCLE}
       wanderRadius={WANDER_RADIUS / boid.scale}
+      alignCircle={ALIGN_CIRCLE}
+      alignRadius={ALIGN_RADIUS / boid.scale}
     />
   ))
 }
@@ -185,6 +256,8 @@ const Boid = ({
   animation,
   wanderCircle,
   wanderRadius,
+  alignCircle,
+  alignRadius,
   ...props
 }) => {
   const { scene, animations } = useGLTF(
@@ -223,9 +296,16 @@ const Boid = ({
   return (
     <group {...props} ref={group} position={position}>
       <primitive object={clone} rotation-y={Math.PI / 2} />
+
       <mesh visible={wanderCircle}>
         <sphereGeometry args={[wanderRadius, 32]} />
         <meshBasicMaterial color="red" wireframe />
+      </mesh>
+
+      
+      <mesh visible={alignCircle}>
+        <sphereGeometry args={[alignRadius, 32]} />
+        <meshBasicMaterial color="green" wireframe />
       </mesh>
     </group>
   )
