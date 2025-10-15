@@ -1,16 +1,16 @@
 import { useAnimations, useGLTF } from '@react-three/drei'
 
+import { useFrame } from '@react-three/fiber'
 import { useAtom } from 'jotai'
-import { useEffect, useMemo, useRef } from 'react'
-import { SkeletonUtils } from 'three-stdlib'
-import { themeAtom, THEMES } from './UI'
 import { useControls } from 'leva'
+import { useEffect, useMemo, useRef } from 'react'
+import { Vector3 } from 'three'
+import { SkeletonUtils } from 'three-stdlib'
 import {
   randFloat,
   randInt,
 } from 'three/src/math/MathUtils.js'
-import { Vector3 } from 'three'
-import { useFrame } from '@react-three/fiber'
+import { themeAtom, THEMES } from './UI'
 
 function remap(value, low1, high1, low2, high2) {
   return (
@@ -21,11 +21,14 @@ function remap(value, low1, high1, low2, high2) {
 
 const limits = new Vector3()
 const wander = new Vector3()
+const horizontalWander = new Vector3()
 const alignment = new Vector3()
+const avoidance = new Vector3()
+const cohesion = new Vector3()
 
 const steering = new Vector3()
 
-export const Boids = ({ boudaries }) => {
+export const Boids = ({ boundaries }) => {
   const [theme] = useAtom(themeAtom)
 
   const {
@@ -38,7 +41,7 @@ export const Boids = ({ boudaries }) => {
   } = useControls(
     'General settings',
     {
-      NB_BOIDS: { value: 60, min: 1, max: 200 },
+      NB_BOIDS: { value: 40, min: 1, max: 200 },
       MIN_SCALE: {
         value: 0.7,
         min: 0.1,
@@ -51,35 +54,35 @@ export const Boids = ({ boudaries }) => {
         max: 2,
         step: 0.1,
       },
-      MIN_SPEED: { value: 0.9, min: 0, max: 10, step: 0.1 },
-      MAX_SPEED: { value: 3.6, min: 0, max: 10, step: 0.1 },
+      MIN_SPEED: { value: 0.5, min: 0, max: 10, step: 0.1 },
+      MAX_SPEED: { value: 2.4, min: 0, max: 10, step: 0.1 },
       MAX_STEERING: {
-        value: 0.1,
+        value: 0.08,
         min: 0,
         max: 1,
         step: 0.01,
       },
     },
-    {
-      collapsed: true,
-    }
+    { collapsed: true }
   )
 
-  const { threeD, ALIGNMENT } = useControls(
-    'Boid Rules',
-    {
-      threeD: { value: false },
-      ALIGNMENT: { value: true },
-    },
-    {
-      collapsed: true,
-    }
-  )
+  const { threeD, ALIGNEMENT, AVOIDANCE, COHESION } =
+    useControls(
+      'Boid Rules',
+      {
+        threeD: { value: true },
+        ALIGNEMENT: { value: true },
+        AVOIDANCE: { value: true },
+        COHESION: { value: true },
+      },
+      { collapsed: true }
+    )
 
   const { WANDER_RADIUS, WANDER_STRENGTH, WANDER_CIRCLE } =
     useControls(
       'Wander',
       {
+        WANDER_CIRCLE: false,
         WANDER_RADIUS: {
           value: 5,
           min: 1,
@@ -89,14 +92,11 @@ export const Boids = ({ boudaries }) => {
         WANDER_STRENGTH: {
           value: 2,
           min: 0,
-          max: 1,
+          max: 10,
           step: 1,
         },
-        WANDER_CIRCLE: false,
       },
-      {
-        collapsed: true,
-      }
+      { collapsed: true }
     )
 
   const { ALIGN_RADIUS, ALIGN_STRENGTH, ALIGN_CIRCLE } =
@@ -108,7 +108,7 @@ export const Boids = ({ boudaries }) => {
           value: 1.2,
           min: 0,
           max: 10,
-          step: 0,
+          step: 0.1,
         },
         ALIGN_STRENGTH: {
           value: 4,
@@ -117,22 +117,55 @@ export const Boids = ({ boudaries }) => {
           step: 1,
         },
       },
-      {
-        collapsed: true,
-      }
+      { collapsed: true }
     )
 
+  const { AVOID_RADIUS, AVOID_STRENGTH, AVOID_CIRCLE } =
+    useControls(
+      'Avoidance',
+      {
+        AVOID_CIRCLE: false,
+        AVOID_RADIUS: { value: 0.8, min: 0, max: 2 },
+        AVOID_STRENGTH: {
+          value: 2,
+          min: 0,
+          max: 10,
+          step: 1,
+        },
+      },
+      { collapsed: true }
+    )
+
+  const {
+    COHESION_RADIUS,
+    COHESION_STRENGTH,
+    COHESION_CIRCLE,
+  } = useControls(
+    'Cohesion',
+    {
+      COHESION_CIRCLE: false,
+      COHESION_RADIUS: { value: 1.22, min: 0, max: 2 },
+      COHESION_STRENGTH: {
+        value: 4,
+        min: 0,
+        max: 10,
+        step: 1,
+      },
+    },
+    { collapsed: true }
+  )
+
   const boids = useMemo(() => {
-    return new Array(NB_BOIDS).fill(null).map((_, i) => ({
+    return new Array(NB_BOIDS).fill().map((_, i) => ({
       model:
         THEMES[theme].models[
           randInt(0, THEMES[theme].models.length - 1)
         ],
       position: new Vector3(
-        randFloat(-boudaries.x / 2, boudaries.x / 2),
-        randFloat(-boudaries.y / 2, boudaries.y / 2),
+        randFloat(-boundaries.x / 2, boundaries.x / 2),
+        randFloat(-boundaries.y / 2, boundaries.y / 2),
         threeD
-          ? randFloat(-boudaries.z / 2, boudaries.z / 2)
+          ? randFloat(-boundaries.z / 2, boundaries.z / 2)
           : 0
       ),
       velocity: new Vector3(0, 0, 0),
@@ -141,18 +174,21 @@ export const Boids = ({ boudaries }) => {
     }))
   }, [
     NB_BOIDS,
-    boudaries,
+    boundaries,
     theme,
     MIN_SCALE,
     MAX_SCALE,
     threeD,
   ])
 
-  useFrame((_, delta) => {
+  const accumulator = useRef(0)
+  const FIXED_STEP = 1 / 30 // 30 Hz physics update
+
+  const stepBoids = (dt) => {
     for (let i = 0; i < boids.length; i++) {
       const boid = boids[i]
 
-      //wander
+      // WANDER
       boid.wander += randFloat(-0.05, 0.05)
 
       wander.set(
@@ -164,58 +200,110 @@ export const Boids = ({ boudaries }) => {
       wander.normalize()
       wander.multiplyScalar(WANDER_STRENGTH)
 
-      //reset forces
+      horizontalWander.set(
+        Math.cos(boid.wander) * WANDER_RADIUS,
+        0,
+        Math.sin(boid.wander) * WANDER_RADIUS
+      )
+
+      horizontalWander.normalize()
+      horizontalWander.multiplyScalar(WANDER_STRENGTH)
+
+      // RESET FORCES
       limits.multiplyScalar(0)
       steering.multiplyScalar(0)
       alignment.multiplyScalar(0)
+      avoidance.multiplyScalar(0)
+      cohesion.multiplyScalar(0)
 
-      //limits
-      if (Math.abs(boid.position.x) + 1 > boudaries.x / 2) {
+      // LIMITS
+      if (
+        Math.abs(boid.position.x) + 1 >
+        boundaries.x / 2
+      ) {
         limits.x = -boid.position.x
         boid.wander += Math.PI
       }
-      if (Math.abs(boid.position.y) + 1 > boudaries.y / 2) {
+      if (
+        Math.abs(boid.position.y) + 1 >
+        boundaries.y / 2
+      ) {
         limits.y = -boid.position.y
         boid.wander += Math.PI
       }
-      if (Math.abs(boid.position.z) + 1 > boudaries.z / 2) {
+      if (
+        Math.abs(boid.position.z) + 1 >
+        boundaries.z / 2
+      ) {
         limits.z = -boid.position.z
         boid.wander += Math.PI
       }
       limits.normalize()
       limits.multiplyScalar(50)
 
-      // loop through all boids
+      let totalCohesion = 0
+
+      // Loop through all boids
       for (let b = 0; b < boids.length; b++) {
         if (b === i) {
           // skip to get only other boids
           continue
         }
         const other = boids[b]
-        let distance = boid.position.distanceTo(
-          other.position
-        )
-
-        //alignment
-        if (distance > 0 && distance < ALIGN_RADIUS) {
+        let d = boid.position.distanceTo(other.position)
+        // ALIGNEMENT
+        if (d > 0 && d < ALIGN_RADIUS) {
           const copy = other.velocity.clone()
           copy.normalize()
-          copy.divideScalar(distance)
+          copy.divideScalar(d)
           alignment.add(copy)
+        }
+
+        // AVOID
+        if (d > 0 && d < AVOID_RADIUS) {
+          const diff = boid.position
+            .clone()
+            .sub(other.position)
+          diff.normalize()
+          diff.divideScalar(d)
+        }
+
+        // COHESION
+        if (d > 0 && d < COHESION_RADIUS) {
+          cohesion.add(other.position)
+          totalCohesion++
         }
       }
 
-      //apply forces
+      // APPLY FORCES
+
       steering.add(limits)
       steering.add(wander)
+      if (threeD) {
+        steering.add(horizontalWander)
+      }
 
-      if (ALIGNMENT) {
+      if (ALIGNEMENT) {
         alignment.normalize()
         alignment.multiplyScalar(ALIGN_STRENGTH)
         steering.add(alignment)
       }
 
-      steering.clampLength(0, MAX_STEERING * delta)
+      if (AVOIDANCE) {
+        avoidance.normalize()
+        avoidance.multiplyScalar(AVOID_STRENGTH)
+        steering.add(avoidance)
+      }
+
+      if (COHESION && totalCohesion > 0) {
+        cohesion.divideScalar(totalCohesion)
+        cohesion.sub(boid.position)
+        cohesion.normalize()
+        cohesion.multiplyScalar(COHESION_STRENGTH)
+        steering.add(cohesion)
+      }
+
+      steering.clampLength(0, MAX_STEERING * dt)
       boid.velocity.add(steering)
       boid.velocity.clampLength(
         0,
@@ -225,11 +313,25 @@ export const Boids = ({ boudaries }) => {
           MAX_SCALE,
           MAX_SPEED,
           MIN_SPEED
-        ) * delta
+        ) * dt
       )
 
-      //apply velocity
+      // APPLY VELOCITY
       boid.position.add(boid.velocity)
+    }
+  }
+
+  useFrame((_, delta) => {
+    accumulator.current += delta
+    let subSteps = 0
+    const MAX_SUBSTEPS = 3
+    while (
+      accumulator.current >= FIXED_STEP &&
+      subSteps < MAX_SUBSTEPS
+    ) {
+      stepBoids(FIXED_STEP)
+      accumulator.current -= FIXED_STEP
+      subSteps++
     }
   })
 
@@ -245,6 +347,10 @@ export const Boids = ({ boudaries }) => {
       wanderRadius={WANDER_RADIUS / boid.scale}
       alignCircle={ALIGN_CIRCLE}
       alignRadius={ALIGN_RADIUS / boid.scale}
+      avoidCircle={AVOID_CIRCLE}
+      avoidRadius={AVOID_RADIUS / boid.scale}
+      cohesionCircle={COHESION_CIRCLE}
+      cohesionRadius={COHESION_RADIUS / boid.scale}
     />
   ))
 }
@@ -258,6 +364,10 @@ const Boid = ({
   wanderRadius,
   alignCircle,
   alignRadius,
+  avoidCircle,
+  avoidRadius,
+  cohesionCircle,
+  cohesionRadius,
   ...props
 }) => {
   const { scene, animations } = useGLTF(
@@ -289,23 +399,33 @@ const Boid = ({
     target.lookAt(
       group.current.position.clone().add(velocity)
     )
-    group.current.quaternion.slerp(target.quaternion, 0.1)
-    group.current.position.copy(position)
+    group.current.quaternion.slerp(target.quaternion, 0.07)
+
+    // smooth render position towards physics position
+    group.current.position.lerp(position, 0.15)
   })
 
   return (
     <group {...props} ref={group} position={position}>
       <primitive object={clone} rotation-y={Math.PI / 2} />
-
       <mesh visible={wanderCircle}>
         <sphereGeometry args={[wanderRadius, 32]} />
-        <meshBasicMaterial color="red" wireframe />
+        <meshBasicMaterial color={'red'} wireframe />
       </mesh>
 
-      
       <mesh visible={alignCircle}>
         <sphereGeometry args={[alignRadius, 32]} />
-        <meshBasicMaterial color="green" wireframe />
+        <meshBasicMaterial color={'green'} wireframe />
+      </mesh>
+
+      <mesh visible={avoidCircle}>
+        <sphereGeometry args={[avoidRadius, 32]} />
+        <meshBasicMaterial color={'blue'} wireframe />
+      </mesh>
+
+      <mesh visible={cohesionCircle}>
+        <sphereGeometry args={[cohesionRadius, 32]} />
+        <meshBasicMaterial color={'yellow'} wireframe />
       </mesh>
     </group>
   )

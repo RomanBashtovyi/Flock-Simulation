@@ -1,30 +1,39 @@
 import {
+  Center,
   Environment,
+  Float,
+  MeshTransmissionMaterial,
   OrbitControls,
   SoftShadows,
+  Text3D,
 } from '@react-three/drei'
-import { useControls } from 'leva'
-import { useState, useEffect } from 'react'
-import { DoubleSide } from 'three'
 
+import {
+  Bloom,
+  DepthOfField,
+  EffectComposer,
+  GodRays,
+} from '@react-three/postprocessing'
 import { useAtom } from 'jotai'
+import { useControls } from 'leva'
+import { useEffect, useState } from 'react'
+import { DoubleSide } from 'three'
+import { degToRad } from 'three/src/math/MathUtils.js'
 import { Boids } from './Boids'
 import { themeAtom, THEMES } from './UI'
 
 export const Experience = () => {
   const [theme] = useAtom(themeAtom)
 
-  const boudaries = useControls(
-    'Boudaries',
+  const boundaries = useControls(
+    'Boundaries',
     {
-      debug: true,
+      debug: false,
       x: { value: 12, min: 0, max: 40 },
       y: { value: 8, min: 0, max: 40 },
       z: { value: 20, min: 0, max: 40 },
     },
-    {
-      collapsed: true,
-    }
+    { collapsed: true }
   )
 
   const [size, setSize] = useState([
@@ -33,11 +42,10 @@ export const Experience = () => {
   ])
   const scaleX = Math.max(0.5, size[0] / 1920)
   const scaleY = Math.max(0.5, size[1] / 1080)
-
-  const responsiveBoudaries = {
-    x: boudaries.x * scaleX,
-    y: boudaries.y * scaleY,
-    z: boudaries.z,
+  const responsiveBoundaries = {
+    x: boundaries.x * scaleX,
+    y: boundaries.y * scaleY,
+    z: boundaries.z,
   }
 
   useEffect(() => {
@@ -52,18 +60,57 @@ export const Experience = () => {
     return () =>
       window.removeEventListener('resize', updateSize)
   }, [])
+  const [sunRef, setSunRef] = useState()
+
+  const {
+    focusRange,
+    focusDistance,
+    focalLength,
+    bokehScale,
+  } = useControls(
+    'Depth of field',
+    {
+      focusRange: {
+        value: 3.5,
+        min: 0,
+        max: 20,
+        step: 0.01,
+      },
+      focusDistance: {
+        value: 0.25,
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      focalLength: {
+        value: 0.22,
+        min: 0,
+        max: 1,
+        step: 0.01,
+      },
+      bokehScale: {
+        value: 3.5,
+        min: 0,
+        max: 10,
+        step: 0.1,
+      },
+    },
+    {
+      collapsed: true,
+    }
+  )
 
   return (
     <>
       <OrbitControls />
 
-      <Boids boudaries={responsiveBoudaries} />
-      <mesh visible={boudaries.debug}>
+      <Boids boundaries={responsiveBoundaries} />
+      <mesh visible={boundaries.debug}>
         <boxGeometry
           args={[
-            responsiveBoudaries.x,
-            responsiveBoudaries.y,
-            responsiveBoudaries.z,
+            responsiveBoundaries.x,
+            responsiveBoundaries.y,
+            responsiveBoundaries.z,
           ]}
         />
         <meshStandardMaterial
@@ -75,29 +122,31 @@ export const Experience = () => {
       </mesh>
       {/* GROUND */}
       <mesh
-        position-y={-responsiveBoudaries.y / 2}
+        position-y={-responsiveBoundaries.y / 2}
         rotation-x={-Math.PI / 2}
         receiveShadow
       >
         <planeGeometry args={[100, 100]} />
-        <meshStandardMaterial color={THEMES[theme].groundColor} />
+        <meshStandardMaterial
+          color={THEMES[theme].groundColor}
+        />
       </mesh>
 
       {/* LIGHTS */}
-      <SoftShadows size={15} focus={1.5} samples={12} />
+      <SoftShadows size={9} focus={0.8} samples={5} />
       <Environment preset="sunset"></Environment>
       <directionalLight
         position={[15, 15, 15]}
         intensity={1.5}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.0001}
-        shadow-camera-far={300}
-        shadow-camera-left={-40}
-        shadow-camera-right={40}
-        shadow-camera-top={10}
-        shadow-camera-bottom={-10}
+        shadow-camera-far={200}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={8}
+        shadow-camera-bottom={-8}
         shadow-camera-near={0.1}
       />
       <hemisphereLight
@@ -105,6 +154,110 @@ export const Experience = () => {
         color={THEMES[theme].skyColor}
         groundColor={THEMES[theme].groundColor}
       />
+
+      {/* SUN */}
+      <mesh
+        ref={(ref) => setSunRef(ref)}
+        position-y={responsiveBoundaries.y / 4}
+        position-z={-10}
+        rotation-x={degToRad(70)}
+      >
+        <circleGeometry args={[12, 64]} />
+        <meshBasicMaterial
+          depthWrite={false}
+          color={THEMES[theme].sunColor}
+          transparent
+          opacity={1}
+        />
+      </mesh>
+
+      {/* TEXT */}
+      <group key={theme + scaleX}>
+        <Float
+          position-y={0.5 * scaleX}
+          floatIntensity={2 * scaleX}
+          rotationIntensity={2}
+        >
+          <Center>
+            <Text3D
+              castShadow
+              bevelEnabled
+              font="/fonts/Poppins Black_Regular.json"
+              smooth={1}
+              scale={0.008 * scaleX}
+              size={80}
+              height={4}
+              curveSegments={8}
+              bevelThickness={20}
+              bevelSize={2}
+              bevelOffset={0}
+              bevelSegments={3}
+            >
+              {THEMES[theme].title}
+              <MeshTransmissionMaterial
+                clearcoat={1}
+                samples={2}
+                thickness={18}
+                chromaticAberration={0.1}
+                anisotropy={0.3}
+              />
+            </Text3D>
+          </Center>
+        </Float>
+        <Float
+          position-y={-0.5 * scaleX}
+          speed={3}
+          floatIntensity={1 * scaleX}
+        >
+          <Center>
+            <Text3D
+              castShadow
+              bevelEnabled
+              font="/fonts/Poppins Black_Regular.json"
+              smooth={1}
+              scale={0.008 * scaleX}
+              size={80}
+              height={4}
+              curveSegments={8}
+              bevelThickness={20}
+              bevelSize={2}
+              bevelOffset={0}
+              bevelSegments={3}
+            >
+              {THEMES[theme].subtitle}
+              <MeshTransmissionMaterial
+                clearcoat={1}
+                samples={2}
+                thickness={18}
+                chromaticAberration={0.1}
+                anisotropy={0.3}
+              />
+            </Text3D>
+          </Center>
+        </Float>
+      </group>
+
+      {/* Post Processing */}
+      <EffectComposer>
+        {THEMES[theme].dof && (
+          <DepthOfField
+            target={[0, 0, 0]} // where to focus
+            worldFocusRange={focusRange} // how far away to start blurring
+            worldFocusDistance={focusDistance} // where to focus
+            focalLength={focalLength} // focal length
+            bokehScale={bokehScale} // bokeh size
+          />
+        )}
+        {sunRef && (
+          <GodRays
+            sun={sunRef}
+            exposure={0.28}
+            decay={0.92}
+            samples={28}
+          />
+        )}
+        <Bloom luminanceThreshold={2.1} intensity={0.22} />
+      </EffectComposer>
     </>
   )
 }
